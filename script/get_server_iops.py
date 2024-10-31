@@ -18,12 +18,13 @@ def main():
         #print(line)
         if "tput=" in line:
             #print(line)
-            temp = line.split(' ')
+            temp = line.split()
             #print(temp[1])
-            if temp[1]:
-                #print(temp[1])
+            iops = float(temp[1])
+            if iops:
+                #print(iops)
                 count += 1
-                total_mops += float(temp[1])
+                total_mops += iops
 
     print("Average throughput = {:.2f} Mops".format(total_mops/count))
 

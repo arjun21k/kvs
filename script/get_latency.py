@@ -16,14 +16,16 @@ def main():
     total_lat = 0
     for line in file1:
         #print(line)
-        if "avg_latency" in line:
+        #if "avg_latency" in line:
+        if "avg_lat" in line:
             #print(line)
             temp = line.split(' ')
-            #print(temp[1])
-            if temp[1]:
-                #print(temp[1])
+            #print(temp[0])
+            if temp[0]:
+                t = temp[0].split('=')
+                #print(t[1])
                 count += 1
-                total_lat += float(temp[1])
+                total_lat += float(t[1])
 
     print("Average latency = {:.2f} us".format(total_lat/count))
 

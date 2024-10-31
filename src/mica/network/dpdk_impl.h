@@ -41,7 +41,7 @@ DPDK<StaticConfig>::DPDK(const ::mica::util::Config& config)
     uint32_t ipv4_addr = NetworkAddress::parse_ipv4_addr(
         port_conf.get("ipv4_addr").get_str().c_str());
 
-    ether_addr mac_addr;
+    rte_ether_addr mac_addr;
     if (port_conf.get("mac_addr").exists())
       mac_addr = NetworkAddress::parse_mac_addr(
           port_conf.get("mac_addr").get_str().c_str());
@@ -339,7 +339,7 @@ void DPDK<StaticConfig>::start() {
   // TODO: We may want to allow higher link speeds.
   //eth_conf.link_speeds = ETH_LINK_SPEED_10G;
   eth_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
-  eth_conf.rxmode.max_rx_pkt_len = ETHER_MAX_LEN;
+  eth_conf.rxmode.max_rx_pkt_len = RTE_ETHER_MAX_LEN;
   //eth_conf.rxmode.hw_vlan_filter = 1;
   //eth_conf.rxmode.hw_vlan_strip = 1;
   eth_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
@@ -391,6 +391,7 @@ void DPDK<StaticConfig>::start() {
         uint16_t queue_id = endpoint_info_[eid].queue_id;
         uint16_t numa_id = endpoint_info_[eid].numa_id;
 
+	//printf("$$$ EndpointID %d\t rte_eth_rx_queue_setup queue_id %"PRIu16"\n", eid, queue_id);
         ret = rte_eth_rx_queue_setup(static_cast<uint8_t>(port_id), queue_id,
                                      StaticConfig::kRXDescCount, numa_id,
                                      &eth_rx_conf, mempools_[numa_id]);
@@ -476,12 +477,77 @@ void DPDK<StaticConfig>::start() {
     if (!ports_[port_id].valid) continue;
     if (ports_[port_id].next_available_queue_id == 0) continue;
 
+    //printf("@@@@@@@@@@@@@@@@ Endpoint_count %d\n", endpoint_count_);
+
     for (uint16_t eid = 0; eid < endpoint_count_; eid++) {
       if (endpoint_info_[eid].port_id != port_id) continue;
       auto queue_id = endpoint_info_[eid].queue_id;
       auto udp_port = endpoint_info_[eid].udp_port;
 
-      rte_eth_fdir_filter filter;
+      //printf("@@@@@@@@@@ UDP port is %d\n", udp_port);
+
+      // Using rte_flow APIs to create flow director to direct ingress traffic to specific queues
+	struct rte_flow_attr attr = { .ingress = 1 };
+	struct rte_flow_item pattern[4];
+	struct rte_flow_action actions[2];
+	struct rte_flow_action_queue queue = { .index = queue_id };
+	struct rte_flow *flow;
+	struct rte_flow_error error;
+
+	memset(&pattern, 0, sizeof(struct rte_flow_item));
+	pattern[0].type = RTE_FLOW_ITEM_TYPE_ETH;
+	pattern[1].type = RTE_FLOW_ITEM_TYPE_IPV4;
+	pattern[2].type = RTE_FLOW_ITEM_TYPE_UDP;
+	struct rte_flow_item_udp udp_spec = {
+		.hdr = {
+			.dst_port = rte_cpu_to_be_16(udp_port),
+		}
+	};
+	// Mask is needed to tell flow API to only consider dst_port and not src_port
+        struct rte_flow_item_udp udp_mask = {
+                .hdr = {
+                        //.src_port = RTE_BE16(0xffff),
+                        .dst_port = RTE_BE16(0xffff),
+                }
+        };
+	pattern[2].spec = &udp_spec;
+	pattern[2].mask = &udp_mask;
+	//printf("@@@@@@@@@ udp spec dst port %d\n", udp_spec.hdr.dst_port);
+
+	/* end the pattern array */
+	pattern[3].type = RTE_FLOW_ITEM_TYPE_END;
+
+	/* create the queue action */
+	memset(&actions, 0 , sizeof(struct rte_flow_action));
+	actions[0].type = RTE_FLOW_ACTION_TYPE_QUEUE;
+	actions[0].conf = &queue;
+	actions[1].type = RTE_FLOW_ACTION_TYPE_END;
+
+	//printf("Queue id %d\n", queue_id);
+	//printf("rte_flow_action_queue index %d\n", queue.index);
+
+	ret = rte_flow_validate(port_id, &attr, pattern, actions, &error);
+	if (ret) {
+       		 fprintf(stderr,
+            	    "error: failed to validate flow rule on port %" PRIu16
+                	" (err=%s)\n",
+                port_id, rte_strerror(ret));
+		 printf("@@@ error type %d\n", error.type);
+		 printf("@@@ error cause %s\n", error.cause);
+		 printf("@@@ error message - %s\n", error.message);
+        	assert(false);
+	       return;
+	}
+	flow = rte_flow_create(port_id, &attr, pattern, actions, &error);
+	if (!flow) {
+		printf("@@@ error type %s\n", error.type);
+		printf("@@@ error cause %s\n", error.cause);
+		printf("Error creating flow : %s\n", error.message);
+		rte_exit(EXIT_FAILURE, "Unable to create flow\n");
+	}
+
+      // DPDK v21.02 has deprecated rte_eth_dev_filter_ctrl()
+      /*rte_eth_fdir_filter filter;
       memset(&filter, 0, sizeof(filter));
       filter.soft_id = eid;
       filter.input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV4_UDP;
@@ -500,7 +566,7 @@ void DPDK<StaticConfig>::start() {
                 port_id, rte_strerror(ret));
         assert(false);
         return;
-      }
+      }*/
     }
   }
 
@@ -568,6 +634,11 @@ uint16_t DPDK<StaticConfig>::receive(EndpointId eid, PacketBuffer** bufs,
       rte_eth_rx_burst(static_cast<uint8_t>(port_id), queue_id,
                        reinterpret_cast<rte_mbuf**>(bufs), buf_count);
 
+  /*if (rx_packets) {
+	  printf("$$$ lcore %2zu received %" PRIu16 " packets (rte_eth_rx_burst) on port_id %" PRIu16 " and queue_id %" PRIu16 "\n",
+                  ::mica::util::lcore.lcore_id(), rx_packets, port_id, queue_id);
+  }*/
+
   ei.rx_bursts++;
   ei.rx_packets += rx_packets;
   return rx_packets;
@@ -587,6 +658,11 @@ uint16_t DPDK<StaticConfig>::send(EndpointId eid, PacketBuffer** bufs,
   uint16_t tx_packets =
       rte_eth_tx_burst(static_cast<uint8_t>(port_id), queue_id,
                        reinterpret_cast<rte_mbuf**>(bufs), buf_count);
+
+  /*if (tx_packets) {
+	  printf("$$$ lcore %2zu transmitted %" PRIu16 " packets (rte_eth_tx_burst) on port_id %" PRIu16 " and queue_id %" PRIu16 "\n",
+                  ::mica::util::lcore.lcore_id(), tx_packets, port_id, queue_id);
+  }*/
 
   ei.tx_bursts++;
   ei.tx_dropped +=

@@ -17,9 +17,9 @@ class NetworkAddress {
     return v;
   }
 
-  static ether_addr parse_mac_addr(const char* s) {
+  static rte_ether_addr parse_mac_addr(const char* s) {
     char* p = const_cast<char*>(s);
-    ether_addr v;
+    rte_ether_addr v;
     for (size_t i = 0; i < 6; i++, p++) {
       assert(p && *p != '\0');
       v.addr_bytes[i] = static_cast<uint32_t>(
@@ -35,7 +35,7 @@ class NetworkAddress {
     return std::string(buf);
   }
 
-  static std::string str_mac_addr(const ether_addr& addr) {
+  static std::string str_mac_addr(const rte_ether_addr& addr) {
     char buf[18];
     snprintf(buf, sizeof(buf), "%02x:%02x:%02x:%02x:%02x:%02x",
              addr.addr_bytes[0], addr.addr_bytes[1], addr.addr_bytes[2],

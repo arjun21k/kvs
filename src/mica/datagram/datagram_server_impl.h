@@ -33,6 +33,9 @@ DatagramServer<StaticConfig>::DatagramServer(const ::mica::util::Config& config,
   stopwatch_.init_end();
 }
 
+uint64_t total_parse_time = 0;
+::mica::util::Stopwatch ra_stopwatch_;
+
 template <class StaticConfig>
 DatagramServer<StaticConfig>::~DatagramServer() {}
 
@@ -189,6 +192,8 @@ void DatagramServer<StaticConfig>::worker_proc(uint16_t lcore_id) {
 
   RequestAccessor ra(this, &worker_stats_[lcore_id], lcore_id);
 
+  ra_stopwatch_ = stopwatch_;
+
   size_t next_index = 0;
   while (!stopping_) {
     auto& rx_tx_state = rx_tx_states[next_index];
@@ -243,7 +248,7 @@ void DatagramServer<StaticConfig>::check_pending_tx_full(
   network_->send(rx_tx_state.eid, rx_tx_state.pending_tx.bufs.data(),
                  rx_tx_state.pending_tx.count);
   if (StaticConfig::kVerbose)
-    printf("lcore %2zu: sent %" PRIu16 " packets\n",
+    printf("lcore %2zu: check_pending_tx_full sent %" PRIu16 " packets\n",
            ::mica::util::lcore.lcore_id(), rx_tx_state.pending_tx.count);
   rx_tx_state.pending_tx.count = 0;
 }
@@ -256,7 +261,7 @@ void DatagramServer<StaticConfig>::check_pending_tx_min(
   network_->send(rx_tx_state.eid, rx_tx_state.pending_tx.bufs.data(),
                  rx_tx_state.pending_tx.count);
   if (StaticConfig::kVerbose)
-    printf("lcore %2zu: sent %" PRIu16 " packets\n",
+    printf("lcore %2zu: check_pending_tx_min sent %" PRIu16 " packets\n",
            ::mica::util::lcore.lcore_id(), rx_tx_state.pending_tx.count);
   rx_tx_state.pending_tx.count = 0;
 }
@@ -273,7 +278,7 @@ void DatagramServer<StaticConfig>::check_pending_tx_timeout(
   network_->send(rx_tx_state.eid, rx_tx_state.pending_tx.bufs.data(),
                  rx_tx_state.pending_tx.count);
   if (StaticConfig::kVerbose)
-    printf("lcore %2zu: sent %" PRIu16 " packets\n",
+    printf("lcore %2zu: check_pending_tx_timeout sent %" PRIu16 " packets\n",
            ::mica::util::lcore.lcore_id(), rx_tx_state.pending_tx.count);
   rx_tx_state.pending_tx.count = 0;
 }
@@ -380,6 +385,8 @@ void DatagramServer<StaticConfig>::report_status(double time_diff) {
       static_cast<double>(std::max(total_operations_done, uint64_t(1)));
 
   printf("tput=%7.3lf Mops",
+  //printf("tot_parse_time = %" PRIu64 "", total_parse_time);
+  //printf(", tput=%7.3lf Mops",
          static_cast<double>(total_operations_done) / time_diff / 1000000.);
   printf(", success_rate=%6.2lf%%", success_rate * 100.);
   printf(", RX=%7.3lf Mpps (%5.2lf ppb)",
@@ -438,6 +445,16 @@ bool DatagramServer<StaticConfig>::RequestAccessor::prepare(size_t index) {
   assert(index >= next_index_to_retire_);
   assert(index <= next_index_to_prepare_);
   if (index == next_index_to_prepare_) return parse_request_batch();
+  //uint64_t t1, t2;
+  /*bool r;
+  if (index == next_index_to_prepare_) {
+	  uint64_t t1 = ra_stopwatch_.now();
+	  r = parse_request_batch();
+	  uint64_t t2 = ra_stopwatch_.now();
+	  total_parse_time += ra_stopwatch_.diff_in_us(t2, t1);
+
+	  return r;
+  }*/
   return true;
 }
 
@@ -679,6 +696,21 @@ void DatagramServer<StaticConfig>::RequestAccessor::
   pending_response_batch_.b.set_dest_udp_port(src_r.get_src_udp_port());
 
   pending_response_batch_.b.set_response();
+
+  /*const rte_ether_addr& addr = src_r.get_dest_mac_addr();
+  printf("$$$ lcore %2zu\t src_mac_addr MAC: %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8"\n", ::mica::util::lcore.lcore_id(),
+                        addr.addr_bytes[0], addr.addr_bytes[1],
+                        addr.addr_bytes[2], addr.addr_bytes[3],
+                        addr.addr_bytes[4], addr.addr_bytes[5]);
+  const rte_ether_addr& addr2 = src_r.get_src_mac_addr();
+  printf("$$$ lcore %2zu\t dest_mac_addr MAC: %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8"\n", ::mica::util::lcore.lcore_id(),
+                        addr2.addr_bytes[0], addr2.addr_bytes[1],
+                        addr2.addr_bytes[2], addr2.addr_bytes[3],
+                        addr2.addr_bytes[4], addr2.addr_bytes[5]);
+  printf("$$$ lcore %2zu\t src_ipv4_addr %"PRId32"\n", ::mica::util::lcore.lcore_id(), src_r.get_dest_ipv4_addr());
+  printf("$$$ lcore %2zu\t dst_ipv4_addr %"PRId32"\n", ::mica::util::lcore.lcore_id(),  src_r.get_src_ipv4_addr());
+  printf("$$$ lcore %2zu\t src_udp_port %"PRId16"\n", ::mica::util::lcore.lcore_id(), src_r.get_dest_udp_port());
+  printf("$$$ lcore %2zu\t dst_udp_port %"PRId16"\n", ::mica::util::lcore.lcore_id(), src_r.get_src_udp_port());*/
 
   pending_response_batch_.b.finalize();
 

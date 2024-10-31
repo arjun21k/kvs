@@ -9,6 +9,8 @@
 #include "mica/processor/request_accessor.h"
 #include "mica/datagram/datagram_server.h"
 
+//#include <mutex>
+
 // Configuration file entries for DatagramClient:
 //
 //  * directory_refresh_interval (integer): The time interval in seconds to
@@ -42,19 +44,21 @@ struct BasicDatagramClientConfig {
   static constexpr uint32_t kMaxOutstandingRequestCount = 1024;
 
   // The request timeout in microseconds.
-  static constexpr uint16_t kRequestTimeout = 1000;
+  // For CPU-only, 7000 keeps timeout rate between 4-5%
+  // For DPU cases, 800000 keeps the timeout rate between 4-5%
+  static constexpr uint16_t kRequestTimeout = 1000;  //800000; 
 
   // The maximum number of outstanding requests per partition.
   // static constexpr uint32_t kMaxOutstandingRequestCountPerPartition = 64;
 
   // The RX burst size.
-  static constexpr uint16_t kRXBurst = 32;
+  static constexpr uint16_t kRXBurst = 64;
 
   // The TX burst size.
-  static constexpr uint16_t kTXBurst = 32;
+  static constexpr uint16_t kTXBurst = 64;
 
   // The TX burst size to flush.  Must be no larger than kTXBurst.
-  static constexpr uint16_t kTXMinBurst = 32;
+  static constexpr uint16_t kTXMinBurst = 64;
 
   // The TX burst timeout (accumulation time) in microseconds.
   static constexpr uint16_t kTXBurstTimeout = 10;
@@ -192,7 +196,7 @@ class DatagramClient {
   // This differs from local EndpointInfo as it contains more information (e.g.,
   // reachability).
   struct ServerEndpointInfo {
-    ether_addr mac_addr;
+    rte_ether_addr mac_addr;
     uint32_t ipv4_addr;
     uint16_t udp_port;
 
@@ -297,11 +301,15 @@ class DatagramClient {
     uint64_t num_operations_succeeded;
     uint64_t num_operations_rejected;
     uint64_t num_operations_timeout;
+    uint64_t total_latency;
+    uint64_t num_responses;
 
     uint64_t last_num_operations_done;
     uint64_t last_num_operations_succeeded;
     uint64_t last_num_operations_rejected;
     uint64_t last_num_operations_timeout;
+    uint64_t last_total_latency;
+    uint64_t last_num_responses;
   } __attribute__((aligned(128)));
 
   struct EndpointStats {

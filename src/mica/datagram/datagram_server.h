@@ -36,10 +36,10 @@ struct BasicDatagramServerConfig {
   // static constexpr size_t kMaxLCoreCount = 64;
 
   // The RX burst size.
-  static constexpr uint16_t kRXBurst = 32;
+  static constexpr uint16_t kRXBurst = 64;
 
   // The TX burst size.
-  static constexpr uint16_t kTXBurst = 32;
+  static constexpr uint16_t kTXBurst = 64;
 
   // The TX burst size to flush.  Must be no larger than kTXBurst.
   static constexpr uint16_t kTXMinBurst = 1;
@@ -204,6 +204,8 @@ class DatagramServer {
     uint16_t next_packet_index_to_parse_;
     uint16_t next_index_to_prepare_;
     uint16_t next_index_to_retire_;  // Used for diagnosis only.
+
+    ::mica::util::Stopwatch ra_stopwatch_;
   };
 
   ::mica::util::Stopwatch stopwatch_;

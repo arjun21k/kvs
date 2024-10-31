@@ -14,7 +14,7 @@ DatagramClient<StaticConfig>::DatagramClient(const ::mica::util::Config& config,
   stopwatch_.init_start();
 
   directory_refresh_interval_ = ::mica::util::safe_cast<uint32_t>(
-      config.get("directory_refresh_interval").get_uint64(1));
+      config.get("directory_refresh_interval").get_uint64(0));
   directory_refresh_lcore_ = ::mica::util::safe_cast<uint16_t>(
       config.get("directory_refresh_lcore")
           .get_uint64(::mica::util::lcore.lcore_count() - 1));
@@ -368,17 +368,17 @@ void DatagramClient<StaticConfig>::update_remote_eid() {
 
         rs.e[partition_id].remote_eid_index = remote_eindex;
 
-        printf("remote endpoint %2" PRIu32 " <-> partition %" PRIu16
+        /*printf("remote endpoint %2" PRIu32 " <-> partition %" PRIu16
                " on server %s\n",
                s.endpoints[remote_eindex].eid, partition_id,
-               s.server_name.c_str());
+               s.server_name.c_str());*/
         break;
       }
       if (rs.e[partition_id].remote_eid_index ==
           StaticConfig::kMaxEndpointsPerServer) {
-        printf("no remote endpoint can handle remote partition %" PRIu16
+        /*printf("no remote endpoint can handle remote partition %" PRIu16
                " on server %s\n",
-               partition_id, s.server_name.c_str());
+               partition_id, s.server_name.c_str());*/
       }
     }
   }
@@ -405,6 +405,22 @@ void DatagramClient<StaticConfig>::probe_send(EndpointId eid,
 
   b.set_request();
 
+  /*const rte_ether_addr& addr = network_->get_endpoint_info(eid).mac_addr;
+  printf("$$$ lcore_id %2zu Probe_send for EndpointId %d\n", ::mica::util::lcore.lcore_id(), eid);
+  printf("$$$ EndpointId %d\t src_mac_addr MAC: %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8"\n", eid,
+		  	addr.addr_bytes[0], addr.addr_bytes[1],
+			addr.addr_bytes[2], addr.addr_bytes[3],
+			addr.addr_bytes[4], addr.addr_bytes[5]);
+  printf("$$$ EndpointId %d\t dst_mac_addr MAC: %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8" %02"PRIx8"\n", eid,
+                        sei.mac_addr.addr_bytes[0], sei.mac_addr.addr_bytes[1],
+                        sei.mac_addr.addr_bytes[2], sei.mac_addr.addr_bytes[3],
+                        sei.mac_addr.addr_bytes[4], sei.mac_addr.addr_bytes[5]);
+
+  printf("$$$ EndpointId %d\t src_ipv4_addr %"PRId32"\n", eid, rte_cpu_to_be_32(network_->get_endpoint_info(eid).ipv4_addr));
+  printf("$$$ EndpointId %d\t dst_ipv4_addr %"PRId32"\n", eid,  rte_cpu_to_be_32(sei.ipv4_addr));
+  printf("$$$ EndpointId %d\t src_udp_port %"PRId16"\n", eid, rte_cpu_to_be_16(network_->get_endpoint_info(eid).udp_port));
+  printf("$$$ EndpointId %d\t dst_udp_port %"PRId16"\n", eid, rte_cpu_to_be_16(sei.udp_port));*/
+
   // This opaque will not match against any upcoming requests as the event id
   // is too high.
   uint32_t opaque =
@@ -426,10 +442,12 @@ bool DatagramClient<StaticConfig>::probe_receive(EndpointId eid,
   // The same opaque from above.
   uint32_t opaque =
       (static_cast<uint32_t>(kNullRD) << 16) | static_cast<uint32_t>(sei.eid);
-
+  //uint16_t count;
   while (true) {
+    //printf("$$$ lcore_id %2zu EndpointId %d Inside probe_receive\n", ::mica::util::lcore.lcore_id(), eid);
     std::array<PacketBuffer*, StaticConfig::kRXBurst> bufs;
     uint16_t count =
+    count = 
         network_->receive(eid, bufs.data(), StaticConfig::kRXBurst);
     if (count == 0) break;
 
@@ -446,6 +464,12 @@ bool DatagramClient<StaticConfig>::probe_receive(EndpointId eid,
     if (connected) break;
   }
 
+  /*if (connected) {
+	  printf("$$$ lcore_id %u EndpointId %d probe_receive successful. Count = %" PRIu16 "\n", ::mica::util::lcore.lcore_id(), eid, count);
+  } else{
+	  //printf("$$$ lcore_id %u EndpointId %d probe_receive failure. Count = %" PRIu16 "\n", ::mica::util::lcore.lcore_id(), eid, count);
+  }*/
+
   return connected;
 }
 
@@ -459,8 +483,13 @@ bool DatagramClient<StaticConfig>::can_request(uint64_t key_hash) const {
          StaticConfig::kMaxOutstandingRequestCount;
 }
 
-uint64_t request_count = 0;
-uint64_t latency_in_us = 0;
+//uint64_t request_count = 0;
+//uint64_t latency_in_us = 0;
+//std::mutex mtx;
+/*int vv = 0;
+int ww = 0;
+uint64_t dpu3_recv_counter = 0;
+uint64_t cpu2_recv_counter = 0;*/
 
 template <class StaticConfig>
 template <class ResponseHandler>
@@ -506,11 +535,29 @@ void DatagramClient<StaticConfig>::handle_response(ResponseHandler& rh) {
         while (r.find_next()) {
           uint32_t opaque = r.get_opaque();
 
+	  /*uint32_t ip = r.get_src_ipv4_addr();
+	  uint16_t port = r.get_src_udp_port()/256;
+	  if (ip == 73705664 && port == 3 && vv < 1000) {
+		  dpu3_recv_counter++;
+		  printf("recv DPU %"PRIu16": %"PRIu64"\n", port, dpu3_recv_counter);
+		  vv++;
+	  }
+	  if (ip == 2667637929 && port == 1 && ww < 1000) {
+		  cpu2_recv_counter++;
+		  printf("recv CPU %"PRIu16": %"PRIu64"\n", port, cpu2_recv_counter);
+		  ww++;
+	  }*/
+	  //printf("recv: ip = %"PRIu32", port = %d\n", ip, r.get_src_udp_port()/256);
+	  /*if (r.get_src_ipv4_addr() > 0 && vv < 256) {
+		  printf("Recv DPU %d: %" PRIu64"\n", r.get_src_udp_port()/256, stopwatch_.now());
+		  vv++;
+	  }*/
+
 	  //printf("Req Timestamp %" PRIu64 "\n", r.get_timestamp());
 	  //printf("Current Timestamp %" PRIu64 "\n", now);
 	  //printf("Diff in us = %" PRIu64 " us\n", stopwatch_.diff_in_us(now, r.get_timestamp()));
-	  request_count++;
-	  latency_in_us += stopwatch_.diff_in_us(now, r.get_timestamp());
+	  //request_count++;
+	  //latency_in_us += stopwatch_.diff_in_us(now, r.get_timestamp());
 
           // Check if the opaque contains the valid request descriptor.
           auto rd = static_cast<RequestDescriptor>(opaque >> 16);
@@ -518,6 +565,9 @@ void DatagramClient<StaticConfig>::handle_response(ResponseHandler& rh) {
             // Ignore probes.
             continue;
           }
+
+          //request_count++;
+          //latency_in_us += stopwatch_.diff_in_us(now, r.get_timestamp());
 
           // Ignore if the event epoch does not match.
           uint16_t epoch = opaque & ((1 << 16) - 1);
@@ -528,7 +578,15 @@ void DatagramClient<StaticConfig>::handle_response(ResponseHandler& rh) {
           rh.handle(rd, result, r.get_value(), r.get_value_length(),
                     thread_state.rd_items[rd].arg);
 
+          worker_stats_[lcore_id].num_responses++;
+          worker_stats_[lcore_id].total_latency += stopwatch_.diff_in_us(now, r.get_timestamp());
+
           release_rd(thread_state, rd);
+
+	  //mtx.lock();
+          //request_count++;
+          //latency_in_us += stopwatch_.diff_in_us(now, r.get_timestamp());
+	  //mtx.unlock();
 
           worker_stats_[lcore_id].num_operations_done++;
           if (result == Result::kSuccess)
@@ -537,6 +595,8 @@ void DatagramClient<StaticConfig>::handle_response(ResponseHandler& rh) {
             worker_stats_[lcore_id].num_operations_rejected++;
         }
       }
+
+      //printf("recv DPU3: %"PRIu64", CPU2: %"PRIu64"\n", dpu3_recv_counter, cpu2_recv_counter);
 
       for (uint16_t i = 0; i < count; i++) network_->release(bufs[i]);
 
@@ -550,9 +610,9 @@ void DatagramClient<StaticConfig>::handle_response(ResponseHandler& rh) {
         if (time_diff >= 1.) {
           thread_state.last_status_report = now;
 	  //printf("Total requests counted %" PRIu64 "\n", request_count);
-	  printf("avg_latency %3.2lf us\n", static_cast<double>(latency_in_us) / request_count);
+	  /*printf("avg_latency %3.2lf us\n", static_cast<double>(latency_in_us) / request_count);
 	  request_count = 0;
-	  latency_in_us = 0;
+	  latency_in_us = 0;*/
           report_status(time_diff);
         }
       }
@@ -845,6 +905,9 @@ void DatagramClient<StaticConfig>::release_pending_request_batch(
   network_->release(prb.b.get_buffer());
 }
 
+//uint64_t dpu3_send_counter = 0;
+//uint64_t cpu2_send_counter = 0;
+
 template <class StaticConfig>
 void DatagramClient<StaticConfig>::flush_pending_request_batch(
     ThreadState& thread_state, uint32_t server_index, PendingRequestBatch& prb,
@@ -853,7 +916,8 @@ void DatagramClient<StaticConfig>::flush_pending_request_batch(
 
   // No available remote endpoint.
   if (prb.remote_eid_index == StaticConfig::kMaxEndpointsPerServer) {
-    if (StaticConfig::kVerbose) printf("no remote endpoint found\n");
+    //if (StaticConfig::kVerbose) printf("no remote endpoint found\n");
+    printf("no remote endpoint found\n");
     network_->release(prb.b.get_buffer());
     return;
   }
@@ -863,7 +927,8 @@ void DatagramClient<StaticConfig>::flush_pending_request_batch(
 
   // No available local endpoint.
   if (eindex == StaticConfig::kMaxEndpointsPerServer) {
-    if (StaticConfig::kVerbose) printf("no local endpoint found\n");
+    //if (StaticConfig::kVerbose) printf("no local endpoint found\n");
+    printf("no local endpoint found\n");
     network_->release(prb.b.get_buffer());
     return;
   }
@@ -896,6 +961,18 @@ void DatagramClient<StaticConfig>::flush_pending_request_batch(
       rte_cpu_to_be_16(network_->get_endpoint_info(rx_tx_state.eid).udp_port));
   prb.b.set_dest_udp_port(rte_cpu_to_be_16(sei.udp_port));
 
+  /*uint32_t ip = sei.ipv4_addr;
+  uint16_t port = sei.udp_port;
+  //printf("send: ip = %"PRIu32",i port = %"PRIu16"\n", ip, port);
+  if (ip == 3232261124 && port == 3) {
+	  dpu3_send_counter++;
+  }
+  if ( ip == 2850816159 && port == 1) {
+	  cpu2_send_counter++;
+  }*/
+
+  //printf("dst_ipv4_addr %"PRId32""", dst_udp_port %"PRId16"\n", rte_cpu_to_be_32(sei.ipv4_addr), rte_cpu_to_be_16(sei.udp_port));
+
   prb.b.set_request();
 
   prb.b.finalize();
@@ -917,10 +994,24 @@ void DatagramClient<StaticConfig>::flush_pending_request_batch(
   check_pending_tx_full(rx_tx_state);
 }
 
+//int gg = 0;
+
 template <class StaticConfig>
 void DatagramClient<StaticConfig>::check_pending_tx_full(
     RXTXState& rx_tx_state) {
   if (rx_tx_state.pending_tx.count < StaticConfig::kTXBurst) return;
+
+  //uint16_t port = rte_cpu_to_be_16(network_->get_endpoint_info(rx_tx_state.eid).udp_port);
+  //uint32_t ip = rte_cpu_to_be_32(network_->get_endpoint_info(rx_tx_state.eid).ipv4_addr);
+  //printf("ip = %"PRIu32", port = %"PRId16", gg = %d\n", ip, port, gg);
+  /*if (ip == 2667637929 && port == 512 && gg < 60) {
+	printf("Sending to CPU 2: %" PRIu64"\n", stopwatch_.now());
+	gg++;
+  }*/
+  /*if (gg < 20) {
+	  printf("sending dpu3: %"PRIu64", cpu2: %"PRIu64"\n", dpu3_send_counter, cpu2_send_counter);
+	  gg++;
+  }*/
 
   // Send all pending packets to the networks
   network_->send(rx_tx_state.eid, rx_tx_state.pending_tx.bufs.data(),
@@ -998,6 +1089,8 @@ void DatagramClient<StaticConfig>::report_status(double time_diff) {
   uint64_t total_operations_succeeded = 0;
   uint64_t total_operations_rejected = 0;
   uint64_t total_operations_timeout = 0;
+  uint64_t total_num_responses = 0;
+  uint64_t total_latency_sum = 0;
 
   uint64_t rx_bursts = 0;
   uint64_t rx_packets = 0;
@@ -1034,6 +1127,18 @@ void DatagramClient<StaticConfig>::report_status(double time_diff) {
       uint64_t v = worker_stats_[lcore_id].num_operations_timeout;
       uint64_t& last_v = worker_stats_[lcore_id].last_num_operations_timeout;
       total_operations_timeout += v - last_v;
+      last_v = v;
+    }
+    {
+      uint64_t v = worker_stats_[lcore_id].num_responses;
+      uint64_t& last_v = worker_stats_[lcore_id].last_num_responses;
+      total_num_responses += v - last_v;
+      last_v = v; 
+    }
+    {
+      uint64_t v = worker_stats_[lcore_id].total_latency;
+      uint64_t& last_v = worker_stats_[lcore_id].last_total_latency;
+      total_latency_sum += v - last_v;
       last_v = v;
     }
   }
@@ -1086,7 +1191,10 @@ void DatagramClient<StaticConfig>::report_status(double time_diff) {
       static_cast<double>(total_operations_timeout) /
       static_cast<double>(std::max(total_operations_done, uint64_t(1)));
 
-  printf("tput=%7.3lf Mops",
+  //printf("responses = %" PRIu64 "", total_num_responses);
+  printf("avg_lat=%3.2lf us", static_cast<double>(total_latency_sum)/total_num_responses);
+  //printf(", ops = %" PRIu64 "", total_operations_done);
+  printf(", tput=%7.3lf Mops",
          static_cast<double>(total_operations_done) / time_diff / 1000000.);
   printf(", success_rate=%6.2lf%%", success_rate * 100.);
   printf(", reject_rate=%6.2lf%%", reject_rate * 100.);

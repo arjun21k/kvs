@@ -12,14 +12,14 @@
     /*"verbose": true*/
   },
   "processor": {
-    "lcores": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    "partition_count": 12,
+    "lcores": [0, 1, 2, 3, 4, 5],
+    "partition_count": 6,
 
     /*"lcores": [0, 1, 2, 3, 4, 5],
     "partition_count": 6,*/
 
-    /*"lcores": [0, 1],
-    "partition_count": 2,*/
+    /*"lcores": [0],
+    "partition_count": 1,*/
 
     "total_size": 6442450944,    /* 6 GiB */
     "total_item_count": 201326592,  /* 192 Mi */
@@ -33,13 +33,14 @@
   },
 
   "network": {
-    "lcores": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    "lcores": [0, 1, 2, 3, 4, 5],
     /*"lcores": [0, 1, 2, 3, 4, 5],*/
-    /*"lcores": [0, 1],*/
+    /*"lcores": [0],*/
 
     "ports": [
-      {"port_id": 0, "mac_addr": "b8:59:9f:cd:ee:fe", "ipv4_addr": "169.236.0.159"}
-      /*{"port_id": 1, "ipv4_addr": "10.0.0.2"},
+      {"port_id": 0, "mac_addr": "b8:3f:d2:04:da:0c", "ipv4_addr": "169.236.0.159"}
+      /*{"port_id": 0, "mac_addr": "b8:59:9f:cd:ee:fe", "ipv4_addr": "169.236.0.159"},
+      {"port_id": 1, "ipv4_addr": "10.0.0.2"},
       {"port_id": 2, "ipv4_addr": "10.0.0.3"},
       {"port_id": 3, "ipv4_addr": "10.0.0.4"},
       {"port_id": 4, "ipv4_addr": "10.0.0.5"},
@@ -54,22 +55,15 @@
       [2, 0],
       [3, 0],
       [4, 0],
-      [5, 0],
-      [6, 0],
-      [7, 0],
+      [5, 0]
+      /*[6, 0],
+      [7, 0]
       [8, 0],
       [9, 0],
       [10, 0],
-      [11, 0]
+      [11, 0]*/
 
-      /*[0, 0],
-      [1, 0],
-      [2, 0],
-      [3, 0],
-      [4, 0],
-      [5, 0]*/
-
-      /*[0, 0],
+      /*[0, 0]
       [1, 0]*/
     ],
 
@@ -103,10 +97,11 @@
     */
 
     /*"dpdk_args": ["-n", "4", "--socket-mem=2048,2048"]*/
-    "dpdk_args": ["-n", "4", "-w", "0000:01:00.0", "--socket-mem=1024"]
+    "dpdk_args": ["-n", "4", "-a", "0000:01:00.0", "--socket-mem=1024", "-v"]
   },
 
   "server": {
-    "rebalance_interval": 0
+    "rebalance_interval": 0,
+    "lcores": 6
   }
 }

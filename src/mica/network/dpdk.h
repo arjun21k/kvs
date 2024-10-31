@@ -103,7 +103,7 @@ class DPDK : public PacketIOInterface {
 
     // Specific to DPDK.
     // Values copied from Port.
-    ether_addr mac_addr;
+    rte_ether_addr mac_addr;
     uint32_t ipv4_addr;
     uint16_t numa_id;
 
@@ -148,7 +148,7 @@ class DPDK : public PacketIOInterface {
   struct Port {
     uint8_t valid;
 
-    ether_addr mac_addr;
+    rte_ether_addr mac_addr;
     uint32_t ipv4_addr;
     uint16_t numa_id;
 
